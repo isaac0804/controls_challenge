@@ -88,7 +88,6 @@ class TinyPhysicsModel:
     }
     return self.tokenizer.decode(self.predict(input_data, temperature=1.))
 
-
 class TinyPhysicsSimulator:
   def __init__(self, model: TinyPhysicsModel, data_path: str, controller: BaseController, debug: bool = False) -> None:
     self.data_path = data_path
