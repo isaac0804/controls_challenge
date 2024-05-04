@@ -22,15 +22,8 @@ for ii, filename in tqdm(enumerate(filenames)):
     steer_command = torch.tensor(df['steerCommand'].values).float()
     input_data = torch.stack([roll, v_ego, a_ego, target_lataccel]).float().T
 
-    if ii < 1000:
-        test_data.append((input_data, steer_command))
-    else:
-        train_data.append((input_data, steer_command))
-
-def create_dataset(data):
-    x, y = train_data[ii%len(train_data)]
-    input_data.append(x)
-    target.append(y)
+    # test_data.append((input_data, steer_command))
+    train_data.append((input_data, steer_command))
 
 # %%
 
@@ -49,57 +42,54 @@ print(ma/len(train_data))
 print(mi/len(train_data))
 
 # %%
-import torch.nn as nn
-import torch.optim as optim
+EPOCHS = 100
+BATCH_SIZE = 64
+batches = []
 
-class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super(MLP, self).__init__()
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc4 = nn.Linear(hidden_dim, output_dim)
+for i in range(len(train_data)):
+    input_data, target = [], []
+    for j in range(BATCH_SIZE):
+        if i*BATCH_SIZE+j >= len(train_data):
+            break
+        x, y = train_data[i*BATCH_SIZE+j]
+        input_data.append(x)
+        target.append(y)
+    if not input_data: break
+    input_data = torch.stack(input_data)
+    target = torch.stack(target)
+    batches.append((input_data, target))
 
-    def forward(self, x):
-        x = torch.tanh(self.fc1(x))
-        x = self.fc3(torch.tanh(self.fc2(x))) + x
-        x = self.fc4(x)
-        return x
-
-# Initialize the model, loss function, and optimizer
-model = MLP(input_dim=4, hidden_dim=16, output_dim=1)
-criterion = nn.L1Loss()
-optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
+print(len(batches))
 
 
 # %%
-training_steps = 40000
-batch_size = 32
-losses = []
+from models import MLP
+import torch.nn as nn
+import torch.optim as optim
 
-for ii in range(training_steps+1):
-    input_data, target = [], []
+# Initialize the model, loss function, and optimizer
+model = MLP(input_dim=4, hidden_dim=64, output_dim=1)
+criterion1 = nn.L1Loss()
+criterion2 = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-4)
 
-    for _ in range(batch_size):
-        x, y = train_data[ii%len(train_data)]
-        input_data.append(x)
-        target.append(y)
+# %%
 
-    input_data = torch.stack(input_data)
-    target = torch.stack(target)
+for ii in range(EPOCHS):
+    losses = []
+    for input_data, target in batches:
 
-    # Forward pass
-    output = model(input_data)
-    loss = criterion(output.squeeze(), target)
+        # Forward pass
+        output = model(input_data)
+        loss = criterion1(output.squeeze(), target) + criterion2(output.squeeze(), target)
 
-    # Backward pass
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+        # Backward pass
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-    losses.append(loss.item())
+        losses.append(loss.item())
 
-    if ii % 1000 == 0:
-        print(f"Step: {ii}  Loss: {np.mean(losses[-1000:])}")
-
-torch.save(model.state_dict(), "./models/mlp.pt")
+    print(f"Step: {ii}  Loss: {np.mean(losses)}")
+    
+    torch.save(model.state_dict(), "./models/mlp.pt")
