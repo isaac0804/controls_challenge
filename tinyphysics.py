@@ -29,7 +29,6 @@ LAT_ACCEL_COST_MULTIPLIER = 5.0
 
 State = namedtuple('State', ['roll_lataccel', 'v_ego', 'a_ego'])
 
-
 class LataccelTokenizer:
   def __init__(self):
     self.vocab_size = VOCAB_SIZE

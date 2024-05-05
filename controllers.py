@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from models import MLP
+from models import MyMLP, Encoder
 
 class BaseController:
   def update(self, target_lataccel, current_lataccel, state):
@@ -42,7 +42,7 @@ class PIDController(BaseController):
 class MLPController(BaseController):
   def __init__(self) -> None:
     super().__init__()
-    self.model = MLP(4, 64, 1)
+    self.model = MyMLP(4, 64, 1)
     self.model.load_state_dict(torch.load("./models/mlp.pt"))
     self.model.eval()
 
@@ -53,7 +53,30 @@ class MLPController(BaseController):
     target_lataccel = torch.tensor(target_lataccel)
     input_data = torch.stack([roll, v_ego, a_ego, target_lataccel]).float()
     with torch.no_grad(): output_data = self.model(input_data)
-    return output_data.numpy()[0]*-1
+    return output_data.numpy()[0]
+
+class EncoderController(BaseController):
+  def __init__(self) -> None:
+    super().__init__()
+    self.model = Encoder(d_input=4, d_model=128, num_layers=4)
+    self.model.load_state_dict(torch.load("./models/encoder.pt"))
+    self.model.eval()
+    self.input_history = []
+
+  def update(self, target_lataccel, current_lataccel, state):
+    roll = torch.tensor(state.roll_lataccel)
+    v_ego = torch.tensor(state.roll_lataccel)
+    a_ego = torch.tensor(state.roll_lataccel)
+    target_lataccel = torch.tensor(target_lataccel)
+    # delta_lataccel = torch.tensor(target_lataccel-current_lataccel)
+
+    self.input_history.append(torch.Tensor([roll, v_ego, a_ego, target_lataccel]))
+    # self.input_history.append(torch.Tensor([roll, v_ego, a_ego, target_lataccel, delta_lataccel]))
+    if len(self.input_history) > 100: self.input_history.pop(0)
+    input_data = torch.stack(self.input_history).float().unsqueeze(1)
+
+    with torch.no_grad(): output_data = self.model(input_data)
+    return output_data[-1].item() # *-1
 
 
 CONTROLLERS = {
@@ -61,4 +84,5 @@ CONTROLLERS = {
   'simple': SimpleController,
   'pid': PIDController,
   'mlp': MLPController,
+  'enc': EncoderController,
 }
