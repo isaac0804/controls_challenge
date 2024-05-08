@@ -1,10 +1,11 @@
 import argparse
 import numpy as np
-import onnxruntime as ort
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import signal
+import torch
+import onnxruntime as ort
 
 from collections import namedtuple
 from hashlib import md5
@@ -15,7 +16,7 @@ from tqdm import tqdm
 from controllers import BaseController, CONTROLLERS
 
 sns.set_theme()
-signal.signal(signal.SIGINT, signal.SIG_DFL)  # Enable Ctrl-C on plot windows
+signal.signal(signal.SIGINT, signal.SIG_DFL)  # Enable Ctrl-C on plot windows, TQ :)
 
 ACC_G = 9.81
 CONTROL_START_IDX = 100
@@ -34,11 +35,11 @@ class LataccelTokenizer:
     self.vocab_size = VOCAB_SIZE
     self.bins = np.linspace(LATACCEL_RANGE[0], LATACCEL_RANGE[1], self.vocab_size)
 
-  def encode(self, value: Union[float, np.ndarray]) -> Union[int, np.ndarray]:
+  def encode(self, value: Union[float, np.ndarray, torch.tensor]) -> Union[int, np.ndarray]:
     value = self.clip(value)
     return np.digitize(value, self.bins, right=True)
 
-  def decode(self, token: Union[int, np.ndarray]) -> Union[float, np.ndarray]:
+  def decode(self, token: Union[int, np.ndarray, torch.tensor]) -> Union[float, np.ndarray]:
     return self.bins[token]
 
   def clip(self, value: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
@@ -71,16 +72,25 @@ class TinyPhysicsModel:
   def predict(self, input_data: dict, temperature=1.) -> int:
     res = self.ort_session.run(None, input_data)[0]
     probs = self.softmax(res / temperature, axis=-1)
+    # probs.shape : [B, N, D]
+
     # we only care about the last timestep (batch size is just 1)
-    assert probs.shape[0] == 1
+    # assert probs.shape[0] == 1, print(probs.shape)
     assert probs.shape[2] == VOCAB_SIZE
-    sample = np.random.choice(probs.shape[2], p=probs[0, -1])
-    return sample
+    # TODO: Find alternative to sample using prob when dealing with batches 
+    # sample = np.random.choice(probs.shape[2], p=probs[0,-1])
+    # Below is a stupid work around for batch_size > 1
+    sample = []
+    for i in range(probs.shape[0]):
+      sample.append(np.random.choice(probs.shape[2], p=probs[i,-1]))
+      # sample.append(np.argmax(probs[i,-1]))
+    return sample[0] if probs.shape[0] == 1 else np.array(sample)
 
   def get_current_lataccel(self, sim_states: List[State], actions: List[float], past_preds: List[float]) -> float:
     tokenized_actions = self.tokenizer.encode(past_preds)
     raw_states = [list(x) for x in sim_states]
     states = np.column_stack([actions, raw_states])
+    # print(np.expand_dims(states, axis=0).astype(np.float32).shape) # Shape [1,20,4]
     input_data = {
       'states': np.expand_dims(states, axis=0).astype(np.float32),
       'tokens': np.expand_dims(tokenized_actions, axis=0).astype(np.int64)
@@ -133,7 +143,11 @@ class TinyPhysicsSimulator:
 
   def control_step(self, step_idx: int) -> None:
     if step_idx >= CONTROL_START_IDX:
-      action = self.controller.update(self.target_lataccel_history[step_idx], self.current_lataccel, self.state_history[step_idx])
+      # print(f"lat accel history: {len(self.target_lataccel_history)}")
+      # print(f"state history: {len(self.state_history)}")
+      # print(f"action history: {len(self.action_history)}")
+      # print(f"state : {self.state_history[1]}")
+      action = self.controller.update(self.target_lataccel_history, self.current_lataccel_history, self.state_history, self.action_history)
     else:
       action = self.data['steer_command'].values[step_idx]
     action = np.clip(action, STEER_RANGE[0], STEER_RANGE[1])
