@@ -4,27 +4,6 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import math
 
-class MyMLP(nn.Module):
-    def __init__(self, d_input, d_hidden, d_out):
-        super(MyMLP, self).__init__()
-        self.fc1 = nn.Linear(d_input, d_hidden)
-        self.fc2 = nn.Linear(d_hidden, d_hidden)
-        self.fc3 = nn.Linear(d_hidden, d_hidden)
-        self.fc4 = nn.Linear(d_hidden, d_hidden)
-        self.fc5 = nn.Linear(d_hidden, d_hidden)
-        self.fc6 = nn.Linear(d_hidden, d_out)
-        self.dp1 = nn.Dropout(0.1)
-        self.dp2 = nn.Dropout(0.1)
-
-    def forward(self, x):
-        x = torch.tanh(self.fc1(x))
-        x = self.fc3(torch.tanh(self.fc2(x))) + x
-        x = self.dp1(x)
-        x = self.fc5(torch.tanh(self.fc4(x))) + x
-        x = self.dp2(x)
-        x = self.fc6(x)
-        return x
-
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
         super().__init__()
