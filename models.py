@@ -21,7 +21,7 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class Encoder(nn.Module):
-    def __init__(self, d_input=4, d_model=64, num_layers=4, nhead=4) -> None:
+    def __init__(self, d_input=4, d_model=64, num_layers=4, nhead=4, seq_len=100, dropout=0.05) -> None:
         super(Encoder, self).__init__()
 
         self.d_model = d_model
@@ -33,18 +33,19 @@ class Encoder(nn.Module):
         self.conv3 = nn.Conv1d(d_model, d_model*4, kernel_size=15, padding=7, padding_mode="replicate")
         self.conv4 = nn.Conv1d(d_model*4, d_model, kernel_size=15, padding=7, padding_mode="replicate")
 
-        self.positonal_encoding = PositionalEncoding(d_model, dropout=0.1, max_len=100)
-        self.dropout = nn.Dropout(p=0.1)
+        self.positonal_encoding = PositionalEncoding(d_model, dropout=dropout, max_len=seq_len)
 
         norm_layer = nn.LayerNorm(d_model, bias=False)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, bias=False, norm_first=True)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, bias=False, norm_first=True, dropout=dropout)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers, norm=norm_layer)
+        self.norm1 = nn.BatchNorm1d(d_input)
 
         for name, param in self.named_parameters():
             if 'weight' in name and param.data.dim() == 2:
                 nn.init.kaiming_uniform_(param)
 
     def forward(self, x):
+        x = self.norm1(x.permute([1,2,0])).permute([2,0,1])
         x = self.projection_up(x) * math.sqrt(self.d_model)
 
         x = x.permute([1, 2, 0]) # [N, B, D] -> [B, D, N]
@@ -58,7 +59,7 @@ class Encoder(nn.Module):
         x = self.conv4(F.tanh(self.conv3(x))) + x
         x = x.permute([2, 0, 1]) # [B, D, N] -> [N, B, D] 
 
-        x = self.projection_down(self.dropout(x))
+        x = self.projection_down(x)
         return x
 
 class DecoderBlock(nn.Module):
@@ -75,12 +76,8 @@ class DecoderBlock(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
 
     def forward(self, x, mask):
-        # x = self.norm1(x)
-        # x = self.self_attn(x, x, x, attn_mask=mask)[0] + x
         x = self.norm1(self.self_attn(x, x, x, attn_mask=mask)[0]) + x
         x = self.dropout(x)
-        # x = self.norm2(x)
-        # x = self.ff(x) + x
         x = self.norm2(self.ff(x)) + x
         return x
 

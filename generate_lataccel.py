@@ -1,13 +1,17 @@
+# %%
 from tinyphysics import *
 from utils import *
 
 CONTROL_START_IDX = 75
-filedir = "./data/SYNTHETIC_V2"
+filedir = "./data/SYNTHETIC_V3"
 
 # Get synthetic data
 filenames = get_filenames(filedir)[:20000]
 trajectories = get_train_data(filenames, split="all")
-batches = get_batches(trajectories, 1024, batch_first=True)
+
+# %%
+
+batches = get_batches(trajectories, 2000, batch_first=True)
 
 # Simulation model
 tokenizer = LataccelTokenizer()
@@ -16,7 +20,7 @@ sim_model = TinyPhysicsModel("./models/tinyphysics.onnx", debug=False)
 cost = []
 generated = []
 
-for data, steer in tqdm(batches):
+for data, steer in batches:
     # Process a batch at once
     current_lataccel_history = data[:,:CONTROL_START_IDX,-1:]
     for step_idx in tqdm(range(CONTROL_START_IDX,600)):

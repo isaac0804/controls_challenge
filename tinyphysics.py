@@ -197,7 +197,8 @@ class TinyPhysicsSimulator:
         self.plot_data(ax[1], [(self.action_history, 'Action')], ['Step', 'Action'], 'Action')
         self.plot_data(ax[2], [(np.array(self.state_history)[:, 0], 'Roll Lateral Acceleration')], ['Step', 'Lateral Accel due to Road Roll'], 'Lateral Accel due to Road Roll')
         self.plot_data(ax[3], [(np.array(self.state_history)[:, 1], 'v_ego')], ['Step', 'v_ego'], 'v_ego')
-        plt.pause(0.01)
+        plt.pause(0.001)
+        # if self.step_idx == 300: exit()
 
     if self.debug:
       plt.ioff()

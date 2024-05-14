@@ -1,23 +1,30 @@
 # %%
 from utils import *
+import random
+import numpy as np
 
-COST_THRESHOLD = 400
+seed = 42
+random.seed(seed)
+np.random.seed(seed)
+
 BATCH_SIZE = 512
+COST_THRESHOLD = 400
 
 filenames = []
-filedirs = [f"./data/SYNTHETIC_V{i}" for i in range(1,2+1)]
+filedirs = [f"./data/SYNTHETIC_V{i}" for i in range(1,5+1)]
 # filedirs = [f"./data/SYNTHETIC_V1"]
 for filedir in filedirs:
     temp = get_filenames(filedir)
 
-    with open(f"{filedir}/cost.txt", "r") as f: 
-        cost = f.readlines()
-    cost = [float(c) for c in cost]
+    # with open(f"{filedir}/cost.txt", "r") as f: 
+    #     cost = f.readlines()
+    # cost = [float(c) for c in cost]
 
     # Cost filtering
-    for ii, c in enumerate(cost):
-        if c < COST_THRESHOLD:
-            filenames.append(temp[ii])
+    # for ii, c in enumerate(cost):
+    #     if c < COST_THRESHOLD:
+    #         filenames.append(temp[ii])
+    filenames.extend(temp)
 
 print(len(filenames))
 trajectories = get_train_data(filenames, split="all")
@@ -39,31 +46,32 @@ from tqdm import tqdm
 from models import Decoder
 import random
 
-seed = 42
-random.seed(seed)
-np.random.seed(seed)
-torch.cuda.empty_cache()
-
-context_length = 100
-# 64-2 has much potential
-model = Decoder(d_input=5, d_model=128, num_layers=6, seq_len=context_length, dropout=0.05).cuda()
-model.train()
-criterion = nn.MSELoss()
-
+CONTEXT_LENGTH = 100
 EPOCHS = 100
 lr = 1e-3
 lr_min = 1e-6
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+model = Decoder(
+    d_input=5, 
+    d_model=128, 
+    num_layers=6, 
+    seq_len=CONTEXT_LENGTH, 
+    dropout=0.05
+).to(device)
+
+criterion = nn.MSELoss()
 optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
 scheduler1 = optim.lr_scheduler.LinearLR(optimizer, 0.01, 1.0, len(train_data))
 scheduler2 = optim.lr_scheduler.CosineAnnealingLR(optimizer, len(train_data)*(EPOCHS-1),lr_min)
 scheduler = optim.lr_scheduler.ChainedScheduler([scheduler1, scheduler2])
-offset = torch.randint(0, 600-context_length, (1,))
+offset = torch.randint(0, 600-CONTEXT_LENGTH, (1,))
 
 for ii in range(EPOCHS):
     losses = []
     model.train()
     for data in tqdm(train_data):
-        data = data[offset:offset+context_length]
+        data = data[offset:offset+CONTEXT_LENGTH]
         data = data.cuda()
     
         # Forward pass
@@ -87,7 +95,7 @@ for ii in range(EPOCHS):
     eval_losses = []
     model.eval()
     for data in tqdm(test_data):
-        data = data[offset:offset+context_length]
+        data = data[offset:offset+CONTEXT_LENGTH]
         data = data.cuda()
         # Forward pass
         with torch.no_grad():
