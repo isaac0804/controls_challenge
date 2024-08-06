@@ -88,14 +88,24 @@ class Decoder(nn.Module):
         self.seq_len = seq_len
         self.projection_up = nn.Linear(d_input, d_model)
         self.projection_down = nn.Linear(d_model, 1)
-        self.projection_down = nn.Sequential(
+        # self.projection_down = nn.Sequential(
+        #     nn.Linear(d_model, d_model),
+        #     nn.ReLU(),
+        #     nn.Linear(d_model, 1)
+        # )
+        self.positonal_encoding = PositionalEncoding(d_model, dropout=dropout, max_len=seq_len)
+        self.transformer_decoder = nn.ModuleList([DecoderBlock(d_model,nhead,dropout=dropout)]*num_layers)
+        self.norm1 = nn.BatchNorm1d(d_input)
+        self.policy = nn.Sequential(
             nn.Linear(d_model, d_model),
             nn.ReLU(),
             nn.Linear(d_model, 1)
         )
-        self.positonal_encoding = PositionalEncoding(d_model, dropout=dropout, max_len=seq_len)
-        self.transformer_decoder = nn.ModuleList([DecoderBlock(d_model,nhead,dropout=dropout)]*num_layers)
-        self.norm1 = nn.BatchNorm1d(d_input)
+        self.value = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.ReLU(),
+            nn.Linear(d_model, 1)
+        )
 
         for name, param in self.named_parameters():
             if 'weight' in name and param.data.dim() == 2:
@@ -116,5 +126,5 @@ class Decoder(nn.Module):
         mask = self.get_tgt_mask(x.shape[0])
         for layer in self.transformer_decoder:
             x = layer(x, mask=mask)
-        x = self.projection_down(x)
-        return x
+        # x = self.projection_down(x)
+        return self.policy(x), self.value(x)
